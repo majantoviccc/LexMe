@@ -20,13 +20,10 @@ defmodule LexmeWeb.Router do
     get "/", PageController, :home
   end
 
-  scope "/api", LexmeWeb do
-    pipe_through :api
-
-    resources "/projects", ProjectController, only: [:index, :show, :create, :delete]
-    resources "/threads", ThreadController, only: [:index, :show, :create, :delete]
-    resources "/messages", MessageController, only: [:index, :create, :delete]
-  end
+  # Other scopes may use custom stacks.
+  # scope "/api", LexmeWeb do
+  #   pipe_through :api
+  # end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:lexme, :dev_routes) do
