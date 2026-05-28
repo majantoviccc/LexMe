@@ -6,33 +6,40 @@ defmodule Lexme.GeminiService do
 
   @doc """
   Starts a non-blocking Task that streams a Gemini response chunk-by-chunk.
-  Each chunk is sent as {:ai_chunk, text} to `pid`.
-  On completion: :ai_done. On error: {:ai_error, reason}.
+
+  Options:
+    * `:message_id` — opaque identifier echoed back in every reply message,
+      so the channel/UI can route chunks to the right assistant message.
+    * `:system_instruction` — string passed as Gemini `systemInstruction`
+      (used for guardrails / persona).
+
+  Sends to `pid`:
+    * `{:ai_chunk, message_id, text}` for each token
+    * `{:ai_done, message_id}` on completion
+    * `{:ai_error, message_id, reason}` on failure
   """
-  def stream_chat(messages, pid) do
-    Task.start(fn -> do_stream(messages, pid) end)
+  def stream_chat(messages, pid, opts \\ []) do
+    message_id = Keyword.get(opts, :message_id)
+    system_instruction = Keyword.get(opts, :system_instruction)
+    Task.start(fn -> do_stream(messages, pid, message_id, system_instruction) end)
   end
 
   # ── Private ──
 
-  defp do_stream(messages, pid) do
+  defp do_stream(messages, pid, message_id, system_instruction) do
     api_key = Application.get_env(:lexme, :gemini_api_key)
     model = Application.get_env(:lexme, :gemini_model, "gemini-2.0-flash")
 
     if is_nil(api_key) or api_key == "" do
-      send(pid, {:ai_error, "GEMINI_API_KEY is not set"})
+      send(pid, {:ai_error, message_id, "GEMINI_API_KEY is not set"})
       :error
     else
       url = "#{@base_url}/models/#{model}:streamGenerateContent?key=#{api_key}&alt=sse"
 
       body =
-        Jason.encode!(%{
-          contents: messages,
-          generationConfig: %{
-            temperature: 0.9,
-            maxOutputTokens: 2048
-          }
-        })
+        messages
+        |> build_body(system_instruction)
+        |> Jason.encode!()
 
       request =
         Finch.build(
@@ -66,7 +73,7 @@ defmodule Lexme.GeminiService do
               else
                 buffer = acc.buffer <> data
                 {texts, remaining} = extract_sse_chunks(buffer)
-                Enum.each(texts, fn text -> send(pid, {:ai_chunk, text}) end)
+                Enum.each(texts, fn text -> send(pid, {:ai_chunk, message_id, text}) end)
                 {:cont, %{acc | buffer: remaining}}
               end
           end,
@@ -75,12 +82,28 @@ defmodule Lexme.GeminiService do
 
       case result do
         {:ok, _acc} ->
-          send(pid, :ai_done)
+          send(pid, {:ai_done, message_id})
 
         {:error, reason} ->
           Logger.error("[GeminiService] Finch error: #{inspect(reason)}")
-          send(pid, {:ai_error, inspect(reason)})
+          send(pid, {:ai_error, message_id, inspect(reason)})
       end
+    end
+  end
+
+  defp build_body(messages, system_instruction) do
+    base = %{
+      contents: messages,
+      generationConfig: %{
+        temperature: 0.7,
+        maxOutputTokens: 2048
+      }
+    }
+
+    if is_binary(system_instruction) and system_instruction != "" do
+      Map.put(base, :systemInstruction, %{parts: [%{text: system_instruction}]})
+    else
+      base
     end
   end
 

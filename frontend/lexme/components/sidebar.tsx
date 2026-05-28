@@ -7,15 +7,24 @@ import {
   FolderPlus,
   MessageSquarePlus,
   MoreHorizontal,
+  Pencil,
   Scale,
   Search,
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/context-menu";
 import { PromptDialog } from "@/components/ui/prompt-dialog";
+import { SyncButton } from "@/components/sync-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useApp } from "@/lib/app-context";
 import { cn } from "@/lib/utils";
 import type { Project, Thread } from "@/lib/types";
@@ -26,6 +35,16 @@ function threadIdFromPath(pathname: string): string | null {
   return rest || null;
 }
 
+type MenuTarget =
+  | { kind: "thread"; thread: Thread }
+  | { kind: "project"; project: Project };
+
+interface MenuState {
+  x: number;
+  y: number;
+  target: MenuTarget;
+}
+
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -34,7 +53,9 @@ export function Sidebar() {
     state,
     createProject,
     deleteThread,
+    renameThread,
     deleteProject,
+    renameProject,
   } = useApp();
 
   const [query, setQuery] = useState("");
@@ -42,6 +63,13 @@ export function Sidebar() {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [confirmThread, setConfirmThread] = useState<Thread | null>(null);
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
+  const [renameThreadTarget, setRenameThreadTarget] = useState<Thread | null>(
+    null
+  );
+  const [renameProjectTarget, setRenameProjectTarget] = useState<Project | null>(
+    null
+  );
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const filteredThreads = useMemo(() => {
     if (!query.trim()) return state.threads;
@@ -69,16 +97,14 @@ export function Sidebar() {
     return m;
   }, [filteredThreads]);
 
-  const handleNewChat = useCallback(() => {
-    router.push("/");
-  }, [router]);
-
   const handleSelectThread = useCallback(
     (id: string) => {
       router.push(`/c/${id}`);
     },
     [router]
   );
+
+  const goHome = useCallback(() => router.push("/"), [router]);
 
   const handleConfirmDeleteThread = useCallback(() => {
     if (!confirmThread) return;
@@ -107,18 +133,92 @@ export function Sidebar() {
     [createProject]
   );
 
+  const handleRenameThread = useCallback(
+    (title: string) => {
+      if (renameThreadTarget) renameThread(renameThreadTarget.id, title);
+      setRenameThreadTarget(null);
+    },
+    [renameThread, renameThreadTarget]
+  );
+
+  const handleRenameProject = useCallback(
+    (name: string) => {
+      if (renameProjectTarget) renameProject(renameProjectTarget.id, name);
+      setRenameProjectTarget(null);
+    },
+    [renameProject, renameProjectTarget]
+  );
+
+  const openMenuAt = useCallback(
+    (e: ReactMouseEvent, target: MenuTarget) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu({ x: e.clientX, y: e.clientY, target });
+    },
+    []
+  );
+
+  const openMenuFromButton = useCallback(
+    (e: ReactMouseEvent<HTMLButtonElement>, target: MenuTarget) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenu({ x: rect.left, y: rect.bottom, target });
+    },
+    []
+  );
+
+  const menuItems: ContextMenuItem[] = useMemo(() => {
+    if (!menu) return [];
+    if (menu.target.kind === "thread") {
+      const thread = menu.target.thread;
+      return [
+        {
+          label: "Preimenuj",
+          icon: <Pencil className="h-3.5 w-3.5" />,
+          onClick: () => setRenameThreadTarget(thread),
+        },
+        {
+          label: "Obrisi",
+          icon: <Trash2 className="h-3.5 w-3.5" />,
+          destructive: true,
+          onClick: () => setConfirmThread(thread),
+        },
+      ];
+    }
+    const project = menu.target.project;
+    return [
+      {
+        label: "Preimenuj",
+        icon: <Pencil className="h-3.5 w-3.5" />,
+        onClick: () => setRenameProjectTarget(project),
+      },
+      {
+        label: "Obrisi",
+        icon: <Trash2 className="h-3.5 w-3.5" />,
+        destructive: true,
+        onClick: () => setConfirmProject(project),
+      },
+    ];
+  }, [menu]);
+
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar">
-      <div className="flex items-center gap-2 px-4 py-4">
+      <button
+        type="button"
+        onClick={goHome}
+        title="Pocetna"
+        className="flex items-center gap-2 px-4 py-4 hover:bg-sidebar-hover transition-colors cursor-pointer"
+      >
         <Scale className="h-5 w-5" />
         <h1 className="text-base font-semibold tracking-tight">LexMe</h1>
-      </div>
+      </button>
 
       <div className="px-3 space-y-1">
         <Button
           variant="ghost"
           className="w-full justify-start"
-          onClick={handleNewChat}
+          onClick={goHome}
         >
           <MessageSquarePlus className="h-4 w-4" />
           Novi chat
@@ -156,7 +256,12 @@ export function Sidebar() {
               const items = threadsByProject[p.id] ?? [];
               return (
                 <div key={p.id} className="mb-1">
-                  <div className="group flex items-center rounded-lg hover:bg-sidebar-hover">
+                  <div
+                    className="group flex items-center rounded-lg hover:bg-sidebar-hover"
+                    onContextMenu={(e) =>
+                      openMenuAt(e, { kind: "project", project: p })
+                    }
+                  >
                     <button
                       onClick={() =>
                         setOpenProjects((s) => ({ ...s, [p.id]: !open }))
@@ -172,11 +277,13 @@ export function Sidebar() {
                       <span className="truncate">{p.name}</span>
                     </button>
                     <button
-                      onClick={() => setConfirmProject(p)}
-                      className="opacity-0 group-hover:opacity-100 px-2 py-1.5 text-muted hover:text-red-400 cursor-pointer"
-                      title="Obrisi projekat"
+                      onClick={(e) =>
+                        openMenuFromButton(e, { kind: "project", project: p })
+                      }
+                      className="opacity-0 group-hover:opacity-100 px-2 py-1.5 text-muted hover:text-foreground cursor-pointer"
+                      title="Opcije"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <MoreHorizontal className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   {open && (
@@ -192,7 +299,15 @@ export function Sidebar() {
                             thread={t}
                             active={t.id === activeId}
                             onSelect={handleSelectThread}
-                            onDelete={() => setConfirmThread(t)}
+                            onContextMenu={(e) =>
+                              openMenuAt(e, { kind: "thread", thread: t })
+                            }
+                            onMoreClick={(e) =>
+                              openMenuFromButton(e, {
+                                kind: "thread",
+                                thread: t,
+                              })
+                            }
                           />
                         ))
                       )}
@@ -219,17 +334,21 @@ export function Sidebar() {
                 thread={t}
                 active={t.id === activeId}
                 onSelect={handleSelectThread}
-                onDelete={() => setConfirmThread(t)}
+                onContextMenu={(e) =>
+                  openMenuAt(e, { kind: "thread", thread: t })
+                }
+                onMoreClick={(e) =>
+                  openMenuFromButton(e, { kind: "thread", thread: t })
+                }
               />
             ))
           )}
         </div>
       </div>
 
-      <div className="border-t border-border px-4 py-3">
-        <p className="text-xs text-muted">
-          AI asistent za crnogorsko pravo
-        </p>
+      <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+        <SyncButton />
+        <ThemeToggle />
       </div>
 
       <PromptDialog
@@ -240,6 +359,24 @@ export function Sidebar() {
         submitLabel="Kreiraj"
         onSubmit={handleCreateProject}
         onCancel={() => setNewProjectOpen(false)}
+      />
+
+      <PromptDialog
+        open={renameThreadTarget !== null}
+        title="Preimenuj chat"
+        defaultValue={renameThreadTarget?.title ?? ""}
+        submitLabel="Sacuvaj"
+        onSubmit={handleRenameThread}
+        onCancel={() => setRenameThreadTarget(null)}
+      />
+
+      <PromptDialog
+        open={renameProjectTarget !== null}
+        title="Preimenuj projekat"
+        defaultValue={renameProjectTarget?.name ?? ""}
+        submitLabel="Sacuvaj"
+        onSubmit={handleRenameProject}
+        onCancel={() => setRenameProjectTarget(null)}
       />
 
       <ConfirmDialog
@@ -269,6 +406,14 @@ export function Sidebar() {
         onConfirm={handleConfirmDeleteProject}
         onCancel={() => setConfirmProject(null)}
       />
+
+      <ContextMenu
+        open={menu !== null}
+        x={menu?.x ?? 0}
+        y={menu?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenu(null)}
+      />
     </aside>
   );
 }
@@ -277,16 +422,24 @@ interface ThreadRowProps {
   thread: Thread;
   active: boolean;
   onSelect: (id: string) => void;
-  onDelete: () => void;
+  onContextMenu: (e: ReactMouseEvent) => void;
+  onMoreClick: (e: ReactMouseEvent<HTMLButtonElement>) => void;
 }
 
-function ThreadRow({ thread, active, onSelect, onDelete }: ThreadRowProps) {
+function ThreadRow({
+  thread,
+  active,
+  onSelect,
+  onContextMenu,
+  onMoreClick,
+}: ThreadRowProps) {
   return (
     <div
       className={cn(
         "group flex items-center rounded-lg",
         active ? "bg-sidebar-active" : "hover:bg-sidebar-hover"
       )}
+      onContextMenu={onContextMenu}
     >
       <button
         onClick={() => onSelect(thread.id)}
@@ -295,12 +448,9 @@ function ThreadRow({ thread, active, onSelect, onDelete }: ThreadRowProps) {
         {thread.title || "Novi chat"}
       </button>
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        className="opacity-0 group-hover:opacity-100 px-2 py-1.5 text-muted hover:text-red-400 cursor-pointer"
-        title="Obrisi chat"
+        onClick={onMoreClick}
+        className="opacity-0 group-hover:opacity-100 px-2 py-1.5 text-muted hover:text-foreground cursor-pointer"
+        title="Opcije"
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
       </button>
