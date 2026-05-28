@@ -5,12 +5,12 @@ defmodule LexmeWeb.ProjectController do
 
   def index(conn, _params) do
     projects = Projects.list_projects()
-    json(conn, %{data: projects})
+    render(conn, :index, projects: projects)
   end
 
   def show(conn, %{"id" => id}) do
     project = Projects.get_project!(id)
-    json(conn, %{data: project})
+    render(conn, :show, project: project)
   end
 
   def create(conn, params) do
@@ -18,7 +18,7 @@ defmodule LexmeWeb.ProjectController do
       {:ok, project} ->
         conn
         |> put_status(:created)
-        |> json(%{data: project})
+        |> render(:show, project: project)
 
       {:error, changeset} ->
         conn

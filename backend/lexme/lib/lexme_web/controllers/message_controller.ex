@@ -5,12 +5,12 @@ defmodule LexmeWeb.MessageController do
 
   def index(conn, %{"thread_id" => thread_id}) do
     messages = Messages.list_messages_by_thread(thread_id)
-    json(conn, %{data: messages})
+    render(conn, :index, messages: messages)
   end
 
   def index(conn, _params) do
     messages = Messages.list_messages()
-    json(conn, %{data: messages})
+    render(conn, :index, messages: messages)
   end
 
   def create(conn, params) do
@@ -18,7 +18,7 @@ defmodule LexmeWeb.MessageController do
       {:ok, message} ->
         conn
         |> put_status(:created)
-        |> json(%{data: message})
+        |> render(:show, message: message)
 
       {:error, :thread_not_found} ->
         conn
