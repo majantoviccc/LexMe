@@ -35,8 +35,24 @@ case File.read(".env") do
     :ok
 end
 
+# Reads GEMINI_API_KEY at runtime (works in both dev and prod)
+config :lexme,
+  gemini_api_key: System.get_env("GEMINI_API_KEY"),
+  gemini_model: System.get_env("GEMINI_MODEL", "gemini-2.0-flash")
+
+# gemini_ex library config (uses same key)
 config :gemini_ex,
   api_key: System.get_env("GEMINI_API_KEY")
+
+if config_env() == :prod do
+  config :lexme, LexmeWeb.Endpoint,
+    url: [host: System.fetch_env!("PHX_HOST"), port: 443, scheme: "https"],
+    http: [
+      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      port: String.to_integer(System.get_env("PORT") || "4000")
+    ],
+    secret_key_base: System.fetch_env!("SECRET_KEY_BASE")
+end
 
 if System.get_env("PHX_SERVER") do
   config :lexme, LexmeWeb.Endpoint, server: true

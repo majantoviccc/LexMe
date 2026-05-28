@@ -1,54 +1,43 @@
+# LexMe/backend/lexme/lib/lexme_web/channels/chat_channel.ex
 defmodule LexmeWeb.ChatChannel do
-  use Phoenix.Channel
+  use LexmeWeb, :channel
+  require Logger
 
-  def join("chat:lobby", _, socket) do
+  @impl true
+  def join("chat:" <> _room_id, _payload, socket) do
     {:ok, socket}
   end
 
-  def handle_in(
-        "send_message",
-        %{"message" => message},
-        socket
-      ) do
-    Task.start(fn ->
-      stream_gemini(message)
-    end)
+  # Client sends: %{"history" => [...gemini-format messages...]}
+  @impl true
+  def handle_in("new_message", %{"history" => history}, socket) do
+    # Capture channel pid before spawning — Task runs in a different process
+    channel_pid = self()
+
+    # stream_chat is non-blocking (starts a Task internally)
+    Lexme.GeminiService.stream_chat(history, channel_pid)
 
     {:noreply, socket}
   end
 
-  defp stream_gemini(message) do
-    case Gemini.stream_generate(
-           message,
-           model: "gemini-2.5-flash"
-         ) do
-      {:ok, chunks} ->
-        Enum.each(chunks, fn chunk ->
-          token =
-            chunk["candidates"]
-            |> List.first()
-            |> get_in([
-              "content",
-              "parts",
-              Access.at(0),
-              "text"
-            ])
+  # ── Messages from the GeminiService Task ──
 
-          LexmeWeb.Endpoint.broadcast(
-            "chat:lobby",
-            "token",
-            %{token: token}
-          )
-        end)
+  @impl true
+  def handle_info({:ai_chunk, text}, socket) do
+    push(socket, "ai_chunk", %{text: text})
+    {:noreply, socket}
+  end
 
-        LexmeWeb.Endpoint.broadcast(
-          "chat:lobby",
-          "complete",
-          %{}
-        )
+  @impl true
+  def handle_info(:ai_done, socket) do
+    push(socket, "ai_done", %{})
+    {:noreply, socket}
+  end
 
-      {:error, reason} ->
-        IO.inspect(reason)
-    end
+  @impl true
+  def handle_info({:ai_error, reason}, socket) do
+    Logger.error("[ChatChannel] AI error: #{reason}")
+    push(socket, "ai_error", %{reason: reason})
+    {:noreply, socket}
   end
 end
