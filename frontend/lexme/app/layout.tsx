@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { ThemeProvider } from "@/lib/theme-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,6 +20,8 @@ export const metadata: Metadata = {
     "AI chat aplikacija specijalizovana za razumijevanje crnogorskog prava.",
 };
 
+const noFlashScript = `(function(){try{var t=localStorage.getItem('lexme.theme')||'dark';var r=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;if(r==='dark')document.documentElement.classList.add('dark');}catch(e){document.documentElement.classList.add('dark');}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,10 +30,16 @@ export default function RootLayout({
   return (
     <html
       lang="sr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
+      </head>
       <body className="font-sans h-full">
-        <AppShell>{children}</AppShell>
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );

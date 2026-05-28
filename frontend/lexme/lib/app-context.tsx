@@ -11,7 +11,11 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useChatSocket, type SocketStatus } from "./use-chat-socket";
+import {
+  useChatSocket,
+  type GeminiHistoryItem,
+  type SocketStatus,
+} from "./use-chat-socket";
 import { emptyState, loadState, saveStateDebounced } from "./storage";
 import { uid } from "./utils";
 import type { AppState, Message, Project, Thread } from "./types";
@@ -27,8 +31,10 @@ type Action =
       title?: string;
     }
   | { type: "delete_thread"; id: string }
+  | { type: "rename_thread"; id: string; title: string }
   | { type: "new_project"; name: string }
   | { type: "delete_project"; id: string }
+  | { type: "rename_project"; id: string; name: string }
   | { type: "add_message"; msg: Message }
   | { type: "append_token"; messageId: string; token: string }
   | { type: "finish_streaming"; messageId: string }
@@ -80,6 +86,12 @@ function reducer(state: AppState, action: Action): AppState {
           state.activeThreadId === action.id ? null : state.activeThreadId,
       };
     }
+    case "rename_thread": {
+      const threads = state.threads.map((t) =>
+        t.id === action.id ? { ...t, title: action.title } : t
+      );
+      return { ...state, threads };
+    }
     case "new_project": {
       const p: Project = {
         id: uid(),
@@ -87,6 +99,12 @@ function reducer(state: AppState, action: Action): AppState {
         createdAt: Date.now(),
       };
       return { ...state, projects: [p, ...state.projects] };
+    }
+    case "rename_project": {
+      const projects = state.projects.map((p) =>
+        p.id === action.id ? { ...p, name: action.name } : p
+      );
+      return { ...state, projects };
     }
     case "delete_project": {
       const threadIds = state.threads
@@ -165,7 +183,9 @@ interface AppContextValue {
   send: (text: string, currentThreadId: string | null) => void;
   createProject: (name: string) => void;
   deleteThread: (id: string) => void;
+  renameThread: (id: string, title: string) => void;
   deleteProject: (id: string) => void;
+  renameProject: (id: string, name: string) => void;
   setActiveThread: (id: string | null) => void;
   setActiveProject: (id: string | null) => void;
 }
@@ -177,7 +197,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, emptyState);
   const [hydrated, markHydrated] = useReducer(() => true, false);
   const stateRef = useRef(state);
-  const streamingMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -195,15 +214,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const socketHandlers = useMemo(
     () => ({
-      onToken: (token: string) => {
-        const id = streamingMessageIdRef.current;
-        if (id) dispatch({ type: "append_token", messageId: id, token });
+      onChunk: (messageId: string | null, text: string) => {
+        if (messageId) {
+          dispatch({ type: "append_token", messageId, token: text });
+        }
       },
-      onComplete: () => {
-        const id = streamingMessageIdRef.current;
-        if (id) {
-          dispatch({ type: "finish_streaming", messageId: id });
-          streamingMessageIdRef.current = null;
+      onDone: (messageId: string | null) => {
+        if (messageId) {
+          dispatch({ type: "finish_streaming", messageId });
+        }
+      },
+      onError: (messageId: string | null, reason: string) => {
+        if (messageId) {
+          dispatch({
+            type: "append_token",
+            messageId,
+            token: `\n\n[Greska: ${reason}]`,
+          });
+          dispatch({ type: "finish_streaming", messageId });
         }
       },
     }),
@@ -214,11 +242,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "error" || status === "disconnected") {
-      const id = streamingMessageIdRef.current;
-      if (id) {
-        dispatch({ type: "finish_streaming", messageId: id });
-        streamingMessageIdRef.current = null;
-      }
+      dispatch({ type: "cancel_all_streaming" });
     }
   }, [status]);
 
@@ -268,8 +292,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "update_thread_title", threadId, title });
       }
 
-      streamingMessageIdRef.current = assistantMsg.id;
-      const ok = socketSend(text);
+      const history: GeminiHistoryItem[] = [
+        ...current.messages
+          .filter((m) => m.threadId === threadId && !m.streaming && m.content)
+          .sort((a, b) => a.createdAt - b.createdAt)
+          .map((m) => ({
+            role: m.role === "user" ? ("user" as const) : ("model" as const),
+            parts: [{ text: m.content }],
+          })),
+        { role: "user" as const, parts: [{ text }] },
+      ];
+
+      const ok = socketSend(history, assistantMsg.id);
       if (!ok) {
         dispatch({
           type: "append_token",
@@ -278,7 +312,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             "[Greska: nije moguca konekcija sa backend serverom na ws://localhost:4000/socket]",
         });
         dispatch({ type: "finish_streaming", messageId: assistantMsg.id });
-        streamingMessageIdRef.current = null;
       }
 
       if (needsNavigation) router.push(`/c/${threadId}`);
@@ -294,8 +327,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "delete_thread", id });
   }, []);
 
+  const renameThread = useCallback((id: string, title: string) => {
+    dispatch({ type: "rename_thread", id, title });
+  }, []);
+
   const deleteProject = useCallback((id: string) => {
     dispatch({ type: "delete_project", id });
+  }, []);
+
+  const renameProject = useCallback((id: string, name: string) => {
+    dispatch({ type: "rename_project", id, name });
   }, []);
 
   const setActiveThread = useCallback((id: string | null) => {
@@ -314,7 +355,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       send,
       createProject,
       deleteThread,
+      renameThread,
       deleteProject,
+      renameProject,
       setActiveThread,
       setActiveProject,
     }),
@@ -325,7 +368,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       send,
       createProject,
       deleteThread,
+      renameThread,
       deleteProject,
+      renameProject,
       setActiveThread,
       setActiveProject,
     ]
