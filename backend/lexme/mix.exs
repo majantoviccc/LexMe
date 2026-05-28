@@ -67,7 +67,9 @@ defmodule Lexme.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:gemini_ex, "~> 0.13.0"},
-      {:cors_plug, "~> 3.0"}
+      {:cors_plug, "~> 3.0"},
+      {:websockex, "~> 0.4"},
+      {:finch, "~> 0.18"}
     ]
   end
 
