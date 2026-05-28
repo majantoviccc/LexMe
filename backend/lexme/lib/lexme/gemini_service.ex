@@ -54,6 +54,8 @@ defmodule Lexme.GeminiService do
 
       # acc is the SSE line buffer — data arrives in raw TCP chunks that may
       # split across SSE event boundaries, so we accumulate and drain.
+      # Finch.stream/5 expects the callback to return the new acc directly
+      # (it wraps it in {:cont, _} internally before calling stream_while).
       result =
         Finch.stream(
           request,
@@ -61,20 +63,20 @@ defmodule Lexme.GeminiService do
           %{buffer: "", status: 200},
           fn
             {:status, status}, acc ->
-              {:cont, %{acc | status: status}}
+              %{acc | status: status}
 
             {:headers, _headers}, acc ->
-              {:cont, acc}
+              acc
 
             {:data, data}, acc ->
               if acc.status != 200 do
                 Logger.warning("[GeminiService] Non-200 status #{acc.status}: #{data}")
-                {:cont, acc}
+                acc
               else
                 buffer = acc.buffer <> data
                 {texts, remaining} = extract_sse_chunks(buffer)
                 Enum.each(texts, fn text -> send(pid, {:ai_chunk, message_id, text}) end)
-                {:cont, %{acc | buffer: remaining}}
+                %{acc | buffer: remaining}
               end
           end,
           receive_timeout: 60_000
