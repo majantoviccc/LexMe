@@ -5,12 +5,12 @@ defmodule LexmeWeb.ThreadController do
 
   def index(conn, _params) do
     threads = Threads.list_threads()
-    json(conn, %{data: threads})
+    render(conn, :index, threads: threads)
   end
 
   def show(conn, %{"id" => id}) do
     thread = Threads.get_thread!(id)
-    json(conn, %{data: thread})
+    render(conn, :show, thread: thread)
   end
 
   def create(conn, params) do
@@ -18,7 +18,7 @@ defmodule LexmeWeb.ThreadController do
       {:ok, thread} ->
         conn
         |> put_status(:created)
-        |> json(%{data: thread})
+        |> render(:show, thread: thread)
 
       {:error, :project_not_found} ->
         conn
