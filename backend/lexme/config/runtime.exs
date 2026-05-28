@@ -16,6 +16,28 @@ import Config
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
+
+case File.read(".env") do
+  {:ok, contents} ->
+    contents
+    |> String.split("\n", trim: true)
+    |> Enum.each(fn line ->
+      case String.split(line, "=", parts: 2) do
+        [key, value] ->
+          System.put_env(String.trim(key), String.trim(value))
+
+        _ ->
+          :ok
+      end
+    end)
+
+  {:error, _reason} ->
+    :ok
+end
+
+config :gemini_ex,
+  api_key: System.get_env("GEMINI_API_KEY")
+
 if System.get_env("PHX_SERVER") do
   config :lexme, LexmeWeb.Endpoint, server: true
 end
