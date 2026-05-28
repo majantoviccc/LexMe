@@ -23,6 +23,12 @@ defmodule LexmeWeb.Router do
   scope "/api", LexmeWeb do
     pipe_through :api
 
+    post "/messages/user", MessageController, :create_user
+    post "/messages/assistant-placeholder", MessageController, :create_assistant_placeholder
+    patch "/messages/:id/append", MessageController, :append_chunk
+    patch "/messages/:id/complete", MessageController, :mark_complete
+    patch "/messages/:id/fail", MessageController, :mark_failed
+
     resources "/projects", ProjectController, only: [:index, :show, :create, :delete]
     resources "/threads", ThreadController, only: [:index, :show, :create, :delete]
     resources "/messages", MessageController, only: [:index, :create, :delete]
