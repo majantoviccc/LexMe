@@ -14,6 +14,11 @@ defmodule LexmeWeb.MessageJSON do
       content: message.content,
       metadata: message.metadata,
       thread_id: message.thread_id,
+      status: message.status,
+      error: message.error,
+      model: message.model,
+      prompt_tokens: message.prompt_tokens,
+      completion_tokens: message.completion_tokens,
       inserted_at: message.inserted_at,
       updated_at: message.updated_at
     }
