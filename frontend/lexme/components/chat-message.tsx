@@ -4,6 +4,7 @@ import { Scale, User } from "lucide-react";
 import { memo } from "react";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import { useTypewriter } from "@/lib/use-typewriter";
 import type { Message } from "@/lib/types";
 
 interface Props {
@@ -12,6 +13,12 @@ interface Props {
 
 function ChatMessageImpl({ message }: Props) {
   const isUser = message.role === "user";
+  // Reveal assistant text gradually for a token-by-token feel, regardless of
+  // how the backend chunks the response. User messages render instantly.
+  const { text, revealing } = useTypewriter(
+    message.content,
+    !isUser && !!message.streaming
+  );
 
   return (
     <div
@@ -42,11 +49,11 @@ function ChatMessageImpl({ message }: Props) {
             parseIncompleteMarkdown
             className={cn(
               "wrap-break-word space-y-3",
-              message.streaming && "cursor-blink"
+              (message.streaming || revealing) && "cursor-blink"
             )}
             shikiTheme={["github-light", "github-dark"]}
           >
-            {message.content}
+            {text}
           </Streamdown>
         )}
       </div>
