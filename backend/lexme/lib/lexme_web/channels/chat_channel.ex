@@ -1,54 +1,78 @@
 defmodule LexmeWeb.ChatChannel do
   use Phoenix.Channel
 
-  def join("chat:lobby", _, socket) do
+  @impl true
+  def join("chat:lobby", _payload, socket) do
     {:ok, socket}
   end
 
-  def handle_in(
-        "send_message",
-        %{"message" => message},
-        socket
-      ) do
+  @impl true
+  def handle_in("prompt", %{"prompt" => prompt}, socket) do
+    parent = self()
+
     Task.start(fn ->
-      stream_gemini(message)
+      case Gemini.start_stream(prompt) do
+        {:ok, stream_id} ->
+          Gemini.subscribe_stream(stream_id)
+
+          stream_loop(parent, stream_id)
+
+        {:error, error} ->
+          send(parent, {:stream_error, error})
+      end
     end)
 
     {:noreply, socket}
   end
 
-  defp stream_gemini(message) do
-    case Gemini.stream_generate(
-           message,
-           model: "gemini-2.5-flash"
-         ) do
-      {:ok, chunks} ->
-        Enum.each(chunks, fn chunk ->
-          token =
-            chunk["candidates"]
-            |> List.first()
-            |> get_in([
-              "content",
-              "parts",
-              Access.at(0),
-              "text"
-            ])
+  defp stream_loop(parent, stream_id) do
+    receive do
+      {:stream_event, ^stream_id, %{type: :data, data: data}} ->
+        text = extract_text_from_chunk(data)
 
-          LexmeWeb.Endpoint.broadcast(
-            "chat:lobby",
-            "token",
-            %{token: token}
-          )
-        end)
+        if text && text != "" do
+          send(parent, {:stream_chunk, text})
+        end
 
-        LexmeWeb.Endpoint.broadcast(
-          "chat:lobby",
-          "complete",
-          %{}
-        )
+        stream_loop(parent, stream_id)
 
-      {:error, reason} ->
-        IO.inspect(reason)
+      {:stream_complete, ^stream_id} ->
+        send(parent, :stream_complete)
+
+      {:stream_error, ^stream_id, error} ->
+        send(parent, {:stream_error, error})
     end
+  end
+
+  defp extract_text_from_chunk(data) do
+    case get_in(data, ["candidates", Access.at(0), "content", "parts"]) do
+      [%{"text" => text} | _] -> text
+      _ -> nil
+    end
+  end
+
+  @impl true
+  def handle_info({:stream_chunk, chunk}, socket) do
+    push(socket, "chunk", %{
+      text: chunk
+    })
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(:stream_complete, socket) do
+    push(socket, "done", %{})
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:stream_error, error}, socket) do
+    push(socket, "error", %{
+      error: inspect(error)
+    })
+
+    {:noreply, socket}
   end
 end

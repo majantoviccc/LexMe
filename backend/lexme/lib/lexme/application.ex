@@ -12,6 +12,7 @@ defmodule Lexme.Application do
       Lexme.Repo,
       {DNSCluster, query: Application.get_env(:lexme, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lexme.PubSub},
+      {Finch, name: Lexme.Finch},
       # Start a worker by calling: Lexme.Worker.start_link(arg)
       # {Lexme.Worker, arg},
       # Start to serve requests, typically the last entry
