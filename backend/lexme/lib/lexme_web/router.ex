@@ -2,44 +2,37 @@ defmodule LexmeWeb.Router do
   use LexmeWeb, :router
 
   pipeline :browser do
-    plug :accepts, ["html"]
-    plug :fetch_session
-    plug :fetch_live_flash
-    plug :put_root_layout, html: {LexmeWeb.Layouts, :root}
-    plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_live_flash)
+    plug(:put_root_layout, html: {LexmeWeb.Layouts, :root})
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
   end
 
   pipeline :api do
-    plug :accepts, ["json"]
+    plug(:accepts, ["json"])
   end
 
   scope "/", LexmeWeb do
-    pipe_through :browser
+    pipe_through(:browser)
 
-    get "/", PageController, :home
+    get("/", PageController, :home)
   end
 
-<<<<<<< HEAD
   scope "/api", LexmeWeb do
-    pipe_through :api
+    pipe_through(:api)
 
-    post "/messages/user", MessageController, :create_user
-    post "/messages/assistant-placeholder", MessageController, :create_assistant_placeholder
-    patch "/messages/:id/append", MessageController, :append_chunk
-    patch "/messages/:id/complete", MessageController, :mark_complete
-    patch "/messages/:id/fail", MessageController, :mark_failed
+    post("/messages/user", MessageController, :create_user)
+    post("/messages/assistant-placeholder", MessageController, :create_assistant_placeholder)
+    patch("/messages/:id/append", MessageController, :append_chunk)
+    patch("/messages/:id/complete", MessageController, :mark_complete)
+    patch("/messages/:id/fail", MessageController, :mark_failed)
 
-    resources "/projects", ProjectController, only: [:index, :show, :create, :delete]
-    resources "/threads", ThreadController, only: [:index, :show, :create, :delete]
-    resources "/messages", MessageController, only: [:index, :create, :delete]
+    resources("/projects", ProjectController, only: [:index, :show, :create, :delete])
+    resources("/threads", ThreadController, only: [:index, :show, :create, :delete])
+    resources("/messages", MessageController, only: [:index, :create, :delete])
   end
-=======
-  # Other scopes may use custom stacks.
-  # scope "/api", LexmeWeb do
-  #   pipe_through :api
-  # end
->>>>>>> 8933de64fe2b07eda990bb98c8bc770dfd900d96
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:lexme, :dev_routes) do
@@ -51,10 +44,10 @@ defmodule LexmeWeb.Router do
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
-      pipe_through :browser
+      pipe_through(:browser)
 
-      live_dashboard "/dashboard", metrics: LexmeWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
+      live_dashboard("/dashboard", metrics: LexmeWeb.Telemetry)
+      forward("/mailbox", Plug.Swoosh.MailboxPreview)
     end
   end
 end
