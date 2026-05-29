@@ -26,6 +26,7 @@ import { PromptDialog } from "@/components/ui/prompt-dialog";
 import { SyncButton } from "@/components/sync-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useApp } from "@/lib/app-context";
+import { useResizableSidebar } from "@/lib/use-resizable-sidebar";
 import { cn } from "@/lib/utils";
 import type { Project, Thread } from "@/lib/types";
 
@@ -75,6 +76,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     null
   );
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const { width, isDesktop, resizing, startResize, resetWidth } =
+    useResizableSidebar();
 
   const filteredThreads = useMemo(() => {
     if (!query.trim()) return state.threads;
@@ -222,11 +225,25 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         aria-hidden
       />
       <aside
+        style={isDesktop ? { width } : undefined}
         className={cn(
-          "sidebar-theme fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar transition-transform md:static md:translate-x-0",
+          "sidebar-theme fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar md:static md:translate-x-0",
+          resizing ? "" : "transition-transform",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
+        <div
+          onMouseDown={startResize}
+          onTouchStart={startResize}
+          onDoubleClick={resetWidth}
+          title="Povuci za promjenu sirine (dvoklik za reset)"
+          className={cn(
+            "absolute inset-y-0 -right-1 z-50 hidden w-2 cursor-col-resize touch-none md:block",
+            "after:absolute after:inset-y-0 after:right-1 after:w-px after:bg-transparent hover:after:bg-border",
+            resizing && "after:bg-border"
+          )}
+          aria-hidden
+        />
       <button
         type="button"
         onClick={goHome}
