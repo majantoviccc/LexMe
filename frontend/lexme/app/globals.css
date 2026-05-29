@@ -6,29 +6,53 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  /* Crisp white canvas with deep-navy text (law firm palette) */
   --background: #ffffff;
-  --foreground: #0d0d0d;
-  --sidebar: #f9f9f9;
-  --sidebar-hover: #ececec;
-  --sidebar-active: #e3e3e3;
-  --border: #e5e5e5;
-  --muted: #6b6b6b;
-  --user-bubble: #f4f4f4;
+  --foreground: #0f172a;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --user-bubble: #e2e8f0;
   --input-bg: #ffffff;
-  --accent: #0d0d0d;
+
+  /* Gold accent for actions/CTAs, with navy text on top for contrast */
+  --accent: #ca8a04;
+  --accent-foreground: #0f172a;
+
+  /* Clean light-slate sidebar with navy text */
+  --sidebar: #f1f5f9;
+  --sidebar-hover: #e2e8f0;
+  --sidebar-active: #cbd5e1;
+  --sidebar-foreground: #0f172a;
+  --sidebar-muted: #64748b;
+  --sidebar-border: #e2e8f0;
 }
 
 .dark {
-  --background: #212121;
-  --foreground: #ececec;
-  --sidebar: #171717;
-  --sidebar-hover: #2a2a2a;
-  --sidebar-active: #2f2f2f;
-  --border: #2f2f2f;
-  --muted: #9a9a9a;
-  --user-bubble: #2f2f2f;
-  --input-bg: #2f2f2f;
-  --accent: #ffffff;
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --border: #1e293b;
+  --muted: #94a3b8;
+  --user-bubble: #1e293b;
+  --input-bg: #1e293b;
+
+  --accent: #ca8a04;
+  --accent-foreground: #0f172a;
+
+  /* Slightly deeper than the navy canvas so the sidebar stays distinct */
+  --sidebar: #020617;
+  --sidebar-hover: #1e293b;
+  --sidebar-active: #334155;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-muted: #94a3b8;
+  --sidebar-border: #1e293b;
+}
+
+/* Re-scope the shared text/border tokens inside the dark navy sidebar so its
+   children read as light-on-navy regardless of the active theme. */
+.sidebar-theme {
+  --foreground: var(--sidebar-foreground);
+  --muted: var(--sidebar-muted);
+  --border: var(--sidebar-border);
 }
 
 @theme inline {
@@ -42,6 +66,7 @@
   --color-user-bubble: var(--user-bubble);
   --color-input-bg: var(--input-bg);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
