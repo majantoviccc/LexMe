@@ -11,11 +11,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import {
-  useChatSocket,
-  type GeminiHistoryItem,
-  type SocketStatus,
-} from "./use-chat-socket";
+import { useChatSocket, type SocketStatus } from "./use-chat-socket";
 import { emptyState, loadState, saveStateDebounced } from "./storage";
 import { uid } from "./utils";
 import type { AppState, Message, Project, Thread } from "./types";
@@ -197,6 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, emptyState);
   const [hydrated, markHydrated] = useReducer(() => true, false);
   const stateRef = useRef(state);
+  const streamingMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -214,35 +211,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const socketHandlers = useMemo(
     () => ({
-      onChunk: (messageId: string | null, text: string) => {
-        if (messageId) {
-          dispatch({ type: "append_token", messageId, token: text });
+      onChunk: (text: string) => {
+        const id = streamingMessageIdRef.current;
+        if (id) dispatch({ type: "append_token", messageId: id, token: text });
+      },
+      onDone: () => {
+        const id = streamingMessageIdRef.current;
+        if (id) {
+          dispatch({ type: "finish_streaming", messageId: id });
+          streamingMessageIdRef.current = null;
         }
       },
-      onDone: (messageId: string | null) => {
-        if (messageId) {
-          dispatch({ type: "finish_streaming", messageId });
-        }
-      },
-      onError: (messageId: string | null, reason: string) => {
-        if (messageId) {
+      onError: (reason: string) => {
+        const id = streamingMessageIdRef.current;
+        if (id) {
           dispatch({
             type: "append_token",
-            messageId,
+            messageId: id,
             token: `\n\n[Greska: ${reason}]`,
           });
-          dispatch({ type: "finish_streaming", messageId });
+          dispatch({ type: "finish_streaming", messageId: id });
+          streamingMessageIdRef.current = null;
         }
       },
     }),
     []
   );
 
-  const { status, sendMessage: socketSend } = useChatSocket(socketHandlers);
+  const { status, sendPrompt } = useChatSocket(socketHandlers);
 
   useEffect(() => {
     if (status === "error" || status === "disconnected") {
       dispatch({ type: "cancel_all_streaming" });
+      streamingMessageIdRef.current = null;
     }
   }, [status]);
 
@@ -292,18 +293,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "update_thread_title", threadId, title });
       }
 
-      const history: GeminiHistoryItem[] = [
-        ...current.messages
-          .filter((m) => m.threadId === threadId && !m.streaming && m.content)
-          .sort((a, b) => a.createdAt - b.createdAt)
-          .map((m) => ({
-            role: m.role === "user" ? ("user" as const) : ("model" as const),
-            parts: [{ text: m.content }],
-          })),
-        { role: "user" as const, parts: [{ text }] },
-      ];
-
-      const ok = socketSend(history, assistantMsg.id);
+      streamingMessageIdRef.current = assistantMsg.id;
+      const ok = sendPrompt(text);
       if (!ok) {
         dispatch({
           type: "append_token",
@@ -312,11 +303,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             "[Greska: nije moguca konekcija sa backend serverom na ws://localhost:4000/socket]",
         });
         dispatch({ type: "finish_streaming", messageId: assistantMsg.id });
+        streamingMessageIdRef.current = null;
       }
 
       if (needsNavigation) router.push(`/c/${threadId}`);
     },
-    [socketSend, router]
+    [sendPrompt, router]
   );
 
   const createProject = useCallback((name: string) => {

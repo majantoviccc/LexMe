@@ -15,15 +15,10 @@ export type SocketStatus =
   | "disconnected"
   | "error";
 
-export interface GeminiHistoryItem {
-  role: "user" | "model";
-  parts: { text: string }[];
-}
-
 export interface ChatSocketHandlers {
-  onChunk: (messageId: string | null, text: string) => void;
-  onDone: (messageId: string | null) => void;
-  onError: (messageId: string | null, reason: string) => void;
+  onChunk: (text: string) => void;
+  onDone: () => void;
+  onError: (reason: string) => void;
 }
 
 export function useChatSocket(handlers: ChatSocketHandlers) {
@@ -43,31 +38,19 @@ export function useChatSocket(handlers: ChatSocketHandlers) {
     socket.connect();
 
     const channel = socket.channel(CHANNEL_TOPIC, {});
-    channel.on(
-      "ai_chunk",
-      (payload: { message_id?: string | null; text?: string }) => {
-        if (payload?.text) {
-          handlersRef.current.onChunk(payload.message_id ?? null, payload.text);
-        }
-      }
-    );
-    channel.on("ai_done", (payload: { message_id?: string | null }) => {
-      handlersRef.current.onDone(payload?.message_id ?? null);
+    channel.on("chunk", (payload: { text?: string }) => {
+      if (payload?.text) handlersRef.current.onChunk(payload.text);
     });
-    channel.on(
-      "ai_error",
-      (payload: { message_id?: string | null; reason?: string }) => {
-        handlersRef.current.onError(
-          payload?.message_id ?? null,
-          payload?.reason ?? "unknown"
-        );
-      }
-    );
+    channel.on("done", () => {
+      handlersRef.current.onDone();
+    });
+    channel.on("error", (payload: { error?: string }) => {
+      handlersRef.current.onError(payload?.error ?? "unknown");
+    });
 
     channel.join().receive("error", (reason) => {
       setStatus("error");
       handlersRef.current.onError(
-        null,
         typeof reason === "string" ? reason : "join_failed"
       );
     });
@@ -81,15 +64,12 @@ export function useChatSocket(handlers: ChatSocketHandlers) {
     };
   }, []);
 
-  const sendMessage = useCallback(
-    (history: GeminiHistoryItem[], messageId: string): boolean => {
-      const ch = channelRef.current;
-      if (!ch) return false;
-      ch.push("new_message", { history, message_id: messageId });
-      return true;
-    },
-    []
-  );
+  const sendPrompt = useCallback((prompt: string): boolean => {
+    const ch = channelRef.current;
+    if (!ch) return false;
+    ch.push("prompt", { prompt });
+    return true;
+  }, []);
 
-  return { status, sendMessage };
+  return { status, sendPrompt };
 }
