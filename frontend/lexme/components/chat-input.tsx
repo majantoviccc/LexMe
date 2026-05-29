@@ -78,7 +78,7 @@ export function ChatInput({
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity",
               canSend
-                ? "bg-accent text-background hover:opacity-90 cursor-pointer"
+                ? "bg-accent text-accent-foreground hover:opacity-90 cursor-pointer"
                 : "bg-sidebar-hover text-muted cursor-not-allowed"
             )}
             title="Posalji"
