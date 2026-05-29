@@ -7,13 +7,17 @@ defmodule Lexme.Threads do
   alias Lexme.Repo
   alias Lexme.Threads.Thread
 
+  @preloads [:project, :messages]
+
   def list_threads do
     Repo.all(Thread)
   end
 
-  def get_thread!(id) do
-    Repo.get!(Thread, id)
-    |> Repo.preload([:project, :messages])
+  def get_thread(id) do
+    case Repo.get(Thread, id) do
+      nil -> {:error, :not_found}
+      thread -> {:ok, Repo.preload(thread, @preloads)}
+    end
   end
 
   def create_thread(attrs \\ %{}) do

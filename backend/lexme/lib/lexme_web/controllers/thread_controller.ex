@@ -9,8 +9,13 @@ defmodule LexmeWeb.ThreadController do
   end
 
   def show(conn, %{"id" => id}) do
-    thread = Threads.get_thread!(id)
-    render(conn, :show, thread: thread)
+    case Threads.get_thread(id) do
+      {:ok, thread} ->
+        render(conn, :show, thread: thread)
+
+      {:error, :not_found} ->
+        send_resp(conn, :not_found, "")
+    end
   end
 
   def create(conn, params) do

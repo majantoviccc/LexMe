@@ -9,8 +9,13 @@ defmodule LexmeWeb.ProjectController do
   end
 
   def show(conn, %{"id" => id}) do
-    project = Projects.get_project!(id)
-    render(conn, :show, project: project)
+    case Projects.get_project(id) do
+      {:ok, project} ->
+        render(conn, :show, project: project)
+
+      {:error, :not_found} ->
+        send_resp(conn, :not_found, "")
+    end
   end
 
   def create(conn, params) do
