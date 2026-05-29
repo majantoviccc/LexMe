@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-// Minimum reveal speed (characters/second) — sets the steady "typing" cadence
-// the eye reads as word-by-word.
-const MIN_CHARS_PER_SEC = 5;
-// Max time (seconds) the rendered text is allowed to trail behind the text we
-// have actually received. When the backend dumps a big chunk (or the whole
-// answer) at once, the backlog drains within this window instead of crawling.
-const MAX_LAG_SECONDS = 0.7;
+// The one knob: steady typing speed in characters/second. Lower = slower.
+// (The original effective speed was ~90 cps, so 30 is ~3x slower.)
+const CHARS_PER_SEC = 60;
 
 export interface TypewriterResult {
   /** The portion of `target` revealed so far. */
@@ -16,12 +12,17 @@ export interface TypewriterResult {
 }
 
 /**
- * Progressively reveals `target` one slice at a time, decoupling what's shown
- * on screen from how the source text arrives. Pass `animate = true` while the
- * message is streaming; once it has started animating it keeps revealing to the
- * end even after streaming stops, so a response delivered in one big chunk
- * still types out. Messages that were never streamed (e.g. history loaded from
- * storage) render instantly.
+ * Progressively reveals `target` one slice at a time at a fixed cadence,
+ * decoupling what's shown on screen from how the source text arrives. Pass
+ * `animate = true` while the message is streaming; once it has started
+ * animating it keeps revealing to the end even after streaming stops, so a
+ * response delivered in one big chunk still types out at the same speed.
+ * Messages that were never streamed (e.g. history loaded from storage) render
+ * instantly.
+ *
+ * Speed is driven by a fractional accumulator rather than "at least one char
+ * per animation frame", so rates well below the ~60fps frame rate (i.e. slow,
+ * readable typing) are honoured exactly.
  */
 export function useTypewriter(
   target: string,
@@ -36,6 +37,8 @@ export function useTypewriter(
   // Latches on the first time this message is animating; keeps the reveal going
   // until it catches up, even after `animate` flips back to false.
   const everAnimatedRef = useRef(animate);
+  // Carries the sub-character remainder between frames so slow rates work.
+  const accRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   const runningRef = useRef(false);
@@ -63,6 +66,7 @@ export function useTypewriter(
 
     runningRef.current = true;
     lastTsRef.current = null;
+    accRef.current = 0;
 
     const stop = () => {
       runningRef.current = false;
@@ -76,23 +80,23 @@ export function useTypewriter(
       lastTsRef.current = ts;
 
       const tgt = targetLenRef.current;
-      const cur = displayLenRef.current;
+      let cur = displayLenRef.current;
       if (cur >= tgt) {
         stop();
         return;
       }
 
-      const remaining = tgt - cur;
-      const cps = Math.max(MIN_CHARS_PER_SEC, remaining / MAX_LAG_SECONDS);
-      const next = Math.min(
-        tgt,
-        cur + Math.max(1, Math.round((cps * dt) / 1000)),
-      );
+      // Accumulate fractional progress; only advance whole characters.
+      accRef.current += (CHARS_PER_SEC * dt) / 1000;
+      const advance = Math.floor(accRef.current);
+      if (advance >= 1) {
+        accRef.current -= advance;
+        cur = Math.min(tgt, cur + advance);
+        displayLenRef.current = cur;
+        setDisplayLen(cur);
+      }
 
-      displayLenRef.current = next;
-      setDisplayLen(next);
-
-      if (next >= tgt) {
+      if (cur >= tgt) {
         stop();
         return;
       }
