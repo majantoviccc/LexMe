@@ -2,6 +2,7 @@
 
 import { Scale, User } from "lucide-react";
 import { memo } from "react";
+import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types";
 
@@ -32,14 +33,22 @@ function ChatMessageImpl({ message }: Props) {
             : "bg-transparent text-foreground"
         )}
       >
-        <div
-          className={cn(
-            "whitespace-pre-wrap wrap-break-word",
-            message.streaming && "cursor-blink"
-          )}
-        >
-          {message.content}
-        </div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap wrap-break-word">
+            {message.content}
+          </div>
+        ) : (
+          <Streamdown
+            parseIncompleteMarkdown
+            className={cn(
+              "wrap-break-word space-y-3",
+              message.streaming && "cursor-blink"
+            )}
+            shikiTheme={["github-light", "github-dark"]}
+          >
+            {message.content}
+          </Streamdown>
+        )}
       </div>
       {isUser && (
         <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-user-bubble">

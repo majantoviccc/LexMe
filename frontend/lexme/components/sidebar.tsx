@@ -45,7 +45,12 @@ interface MenuState {
   target: MenuTarget;
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeId = threadIdFromPath(pathname);
@@ -100,11 +105,15 @@ export function Sidebar() {
   const handleSelectThread = useCallback(
     (id: string) => {
       router.push(`/c/${id}`);
+      onClose();
     },
-    [router]
+    [router, onClose]
   );
 
-  const goHome = useCallback(() => router.push("/"), [router]);
+  const goHome = useCallback(() => {
+    router.push("/");
+    onClose();
+  }, [router, onClose]);
 
   const handleConfirmDeleteThread = useCallback(() => {
     if (!confirmThread) return;
@@ -203,7 +212,21 @@ export function Sidebar() {
   }, [menu]);
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar">
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-30 bg-black/50 transition-opacity md:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar transition-transform md:static md:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
       <button
         type="button"
         onClick={goHome}
@@ -414,7 +437,8 @@ export function Sidebar() {
         items={menuItems}
         onClose={() => setMenu(null)}
       />
-    </aside>
+      </aside>
+    </>
   );
 }
 
