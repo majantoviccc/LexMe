@@ -9,6 +9,8 @@ defmodule Lexme.Messages do
   alias Lexme.Repo
   alias Lexme.Threads.Thread
 
+  @preloads []
+
   def list_messages do
     Repo.all(Message)
   end
@@ -18,6 +20,13 @@ defmodule Lexme.Messages do
     |> where([m], m.thread_id == ^thread_id)
     |> order_by([m], asc: m.inserted_at)
     |> Repo.all()
+  end
+
+  def get_message(id) do
+    case Repo.get(Message, id) do
+      nil -> {:error, :not_found}
+      message -> {:ok, Repo.preload(message, @preloads)}
+    end
   end
 
   def create_message(attrs \\ %{}) do
@@ -49,8 +58,6 @@ defmodule Lexme.Messages do
     |> create_message()
   end
 
-  def get_message(id), do: Repo.get(Message, id)
-
   def append_message_content(id, chunk) when is_binary(chunk) do
     case Repo.get(Message, id) do
       nil ->
@@ -74,7 +81,14 @@ defmodule Lexme.Messages do
     update_message_state(id, %{"status" => "failed", "error" => error_text})
   end
 
-  def update_message_state(id, attrs) do
+  def delete_message(id) do
+    case Repo.get(Message, id) do
+      nil -> {:error, :not_found}
+      message -> Repo.delete(message)
+    end
+  end
+
+  defp update_message_state(id, attrs) do
     case Repo.get(Message, id) do
       nil ->
         {:error, :not_found}
@@ -83,13 +97,6 @@ defmodule Lexme.Messages do
         message
         |> Message.changeset(Map.new(attrs))
         |> Repo.update()
-    end
-  end
-
-  def delete_message(id) do
-    case Repo.get(Message, id) do
-      nil -> {:error, :not_found}
-      message -> Repo.delete(message)
     end
   end
 end

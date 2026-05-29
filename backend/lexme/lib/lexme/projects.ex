@@ -6,13 +6,17 @@ defmodule Lexme.Projects do
   alias Lexme.Projects.Project
   alias Lexme.Repo
 
+  @preloads [threads: [:messages]]
+
   def list_projects do
     Repo.all(Project)
   end
 
-  def get_project!(id) do
-    Repo.get!(Project, id)
-    |> Repo.preload(threads: [:messages])
+  def get_project(id) do
+    case Repo.get(Project, id) do
+      nil -> {:error, :not_found}
+      project -> {:ok, Repo.preload(project, @preloads)}
+    end
   end
 
   def create_project(attrs \\ %{}) do
