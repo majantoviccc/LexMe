@@ -219,5 +219,3 @@ defmodule StreamingExample do
     IO.puts("")
   end
 end
-
-StreamingExample.run()

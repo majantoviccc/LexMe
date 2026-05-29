@@ -1,63 +1,78 @@
-# LexMe/backend/lexme/lib/lexme_web/channels/chat_channel.ex
 defmodule LexmeWeb.ChatChannel do
-  use LexmeWeb, :channel
-  require Logger
-
-  @system_prompt """
-  Ti si LexMe — AI asistent specijalizovan iskljucivo za pravo Crne Gore.
-  Odgovaras na pitanja vezana za crnogorske zakone, propise, sudsku praksu,
-  Ustav, pravne procedure, prava i obaveze i institucije.
-
-  Ako te neko pita o necem sto NIJE vezano za pravo Crne Gore (npr. kuvanje,
-  programiranje, opste znanje, drugi pravni sistemi), ljubazno odbij i predlozi
-  povezano pravno pitanje na koje mozes da odgovoris.
-
-  Odgovaras na jeziku korisnika (crnogorski / srpski / hrvatski / bosanski).
-  Tvoji odgovori su informativni. Uvijek napomeni da je za konkretne pravne
-  situacije neophodna konsultacija sa kvalifikovanim advokatom u Crnoj Gori.
-  """
+  use Phoenix.Channel
 
   @impl true
-  def join("chat:" <> _room_id, _payload, socket) do
+  def join("chat:lobby", _payload, socket) do
     {:ok, socket}
   end
 
-  # Client sends:
-  #   %{
-  #     "history" => [...Gemini-format messages...],
-  #     "message_id" => "uuid"   # the assistant placeholder id (echoed back in each event)
-  #   }
   @impl true
-  def handle_in("new_message", %{"history" => history} = payload, socket) do
-    message_id = Map.get(payload, "message_id")
-    channel_pid = self()
+  def handle_in("prompt", %{"prompt" => prompt}, socket) do
+    parent = self()
 
-    Lexme.GeminiService.stream_chat(history, channel_pid,
-      message_id: message_id,
-      system_instruction: @system_prompt
-    )
+    Task.start(fn ->
+      case Gemini.start_stream(prompt) do
+        {:ok, stream_id} ->
+          Gemini.subscribe_stream(stream_id)
+
+          stream_loop(parent, stream_id)
+
+        {:error, error} ->
+          send(parent, {:stream_error, error})
+      end
+    end)
 
     {:noreply, socket}
   end
 
-  # ── Messages from the GeminiService Task ──
+  defp stream_loop(parent, stream_id) do
+    receive do
+      {:stream_event, ^stream_id, %{type: :data, data: data}} ->
+        text = extract_text_from_chunk(data)
+
+        if text && text != "" do
+          send(parent, {:stream_chunk, text})
+        end
+
+        stream_loop(parent, stream_id)
+
+      {:stream_complete, ^stream_id} ->
+        send(parent, :stream_complete)
+
+      {:stream_error, ^stream_id, error} ->
+        send(parent, {:stream_error, error})
+    end
+  end
+
+  defp extract_text_from_chunk(data) do
+    case get_in(data, ["candidates", Access.at(0), "content", "parts"]) do
+      [%{"text" => text} | _] -> text
+      _ -> nil
+    end
+  end
 
   @impl true
-  def handle_info({:ai_chunk, message_id, text}, socket) do
-    push(socket, "ai_chunk", %{message_id: message_id, text: text})
+  def handle_info({:stream_chunk, chunk}, socket) do
+    push(socket, "chunk", %{
+      text: chunk
+    })
+
     {:noreply, socket}
   end
 
   @impl true
-  def handle_info({:ai_done, message_id}, socket) do
-    push(socket, "ai_done", %{message_id: message_id})
+  def handle_info(:stream_complete, socket) do
+    push(socket, "done", %{})
+
     {:noreply, socket}
   end
 
   @impl true
-  def handle_info({:ai_error, message_id, reason}, socket) do
-    Logger.error("[ChatChannel] AI error: #{reason}")
-    push(socket, "ai_error", %{message_id: message_id, reason: reason})
+  def handle_info({:stream_error, error}, socket) do
+    push(socket, "error", %{
+      error: inspect(error)
+    })
+
     {:noreply, socket}
   end
 end
