@@ -1,7 +1,14 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { AppProvider, useApp } from "@/lib/app-context";
 import { Sidebar } from "@/components/sidebar";
 import { ChatInput } from "@/components/chat-input";
@@ -16,10 +23,13 @@ function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const threadId = threadIdFromPath(pathname);
   const { state, status, send, setActiveThread, hydrated } = useApp();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (hydrated) setActiveThread(threadId);
   }, [hydrated, threadId, setActiveThread]);
+
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   const handleSend = useCallback(
     (text: string) => send(text, threadId),
@@ -37,10 +47,18 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <Sidebar />
-      <main className="flex h-full flex-1 flex-col">
-        <header className="flex h-12 items-center justify-between border-b border-border px-4">
-          <span className="text-sm font-medium truncate">
+      <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+      <main className="flex h-full min-w-0 flex-1 flex-col">
+        <header className="flex h-12 items-center gap-2 border-b border-border px-4">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            title="Meni"
+            className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover cursor-pointer md:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <span className="flex-1 truncate text-sm font-medium">
             {activeThread?.title ?? "LexMe"}
           </span>
           <ConnectionBadge status={status} />
